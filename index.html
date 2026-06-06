@@ -176,7 +176,7 @@ tr:hover td{background:#fafbfd}
 <!-- LOGIN -->
 <div id="login-screen">
   <div class="login-box">
-    <div class="login-logo">Attend<span>Track</span></div>
+    <div class="login-logo">Green<span>Pack</span></div>
     <div class="login-sub">HR Attendance Management System</div>
     <div class="login-tabs">
       <button class="login-tab active" onclick="setLoginRole('employee')">Employee</button>
@@ -186,7 +186,7 @@ tr:hover td{background:#fafbfd}
     <div class="form-group"><label>Password</label><input type="password" id="login-pass" placeholder="••••••••"/></div>
     <button class="btn-primary" onclick="doLogin()">Sign In →</button>
     <div id="login-error" style="color:#c81e1e;font-size:12px;margin-top:10px;display:none">Invalid credentials. Try demo accounts below.</div>
-    <div class="login-demo"><b>Demo Accounts:</b><br>Employee: <b>EMP001</b> / <b>pass123</b> &nbsp;|&nbsp; HR Admin: <b>admin</b> / <b>admin123</b></div>
+    <div class="login-demo"><b>Demo Accounts:</b><br>Employee: <b>EMP001</b> / <b>123</b> &nbsp;|&nbsp; HR Admin: <b>admin</b> / <b>admin123</b></div>
   </div>
 </div>
 
@@ -232,11 +232,11 @@ tr:hover td{background:#fafbfd}
 // ═══════════════════════════════════════════
 const DB = {
   employees: [
-    {id:'EMP001',name:'Rahul Sharma',dept:'Engineering',position:'Senior Developer',email:'rahul@company.com',phone:'9876543210',password:'pass123',joinDate:'2022-03-15',salary:{basic:45000,hra:18000,ta:3000,medical:1250,pf:5400,tax:3200,advance:0}},
-    {id:'EMP002',name:'Priya Patel',dept:'Marketing',position:'Marketing Executive',email:'priya@company.com',phone:'9876543211',password:'pass123',joinDate:'2021-07-01',salary:{basic:38000,hra:15200,ta:2500,medical:1250,pf:4560,tax:2400,advance:0}},
+    {id:'EMP001',name:'Rahul Sharma',dept:'Production',position:'Senior Developer',email:'rahul@company.com',phone:'9876543210',password:'pass123',joinDate:'2022-03-15',salary:{basic:45000,hra:18000,ta:3000,medical:1250,pf:5400,tax:3200,advance:0}},
+    {id:'EMP002',name:'Priya Patel',dept:'Maintenance',position:'Marketing Executive',email:'priya@company.com',phone:'9876543211',password:'pass123',joinDate:'2021-07-01',salary:{basic:38000,hra:15200,ta:2500,medical:1250,pf:4560,tax:2400,advance:0}},
     {id:'EMP003',name:'Amit Verma',dept:'Sales',position:'Sales Manager',email:'amit@company.com',phone:'9876543212',password:'pass123',joinDate:'2020-01-10',salary:{basic:52000,hra:20800,ta:3500,medical:1250,pf:6240,tax:4800,advance:0}},
     {id:'EMP004',name:'Sneha Joshi',dept:'HR',position:'HR Coordinator',email:'sneha@company.com',phone:'9876543213',password:'pass123',joinDate:'2023-02-20',salary:{basic:36000,hra:14400,ta:2000,medical:1250,pf:4320,tax:1800,advance:0}},
-    {id:'EMP005',name:'Vikram Singh',dept:'Finance',position:'Accountant',email:'vikram@company.com',phone:'9876543214',password:'pass123',joinDate:'2019-06-05',salary:{basic:42000,hra:16800,ta:2500,medical:1250,pf:5040,tax:2900,advance:0}},
+    {id:'EMP005',name:'Vikram Singh',dept:'Dispatch',position:'Accountant',email:'vikram@company.com',phone:'9876543214',password:'pass123',joinDate:'2019-06-05',salary:{basic:42000,hra:16800,ta:2500,medical:1250,pf:5040,tax:2900,advance:0}},
   ],
   attendance: {},
   admin: {id:'admin',name:'HR Admin',password:'admin123'},
