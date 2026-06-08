@@ -6,7 +6,7 @@ cat > /mnt/user-data/outputs/hr-attendance-system/index.html << 'HTMLEOF'
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>GreenLeaf HR — Attendance System</title>
+<title>GreenPack HR — Attendance System</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -232,7 +232,7 @@ tr:hover td{background:#f0fdf4}
   <div class="login-box">
     <div class="login-brand">
       <svg class="login-brand-icon" viewBox="0 0 40 40"><use href="#logo-icon"/></svg>
-      <div class="login-brand-name">GreenLeaf HR<span>Attendance Management</span></div>
+      <div class="login-brand-name">GreenPack HR<span>Attendance Management</span></div>
     </div>
     <div class="login-sub">Welcome back — sign in to continue</div>
     <div class="storage-badge"><span class="storage-dot"></span> Auto-save enabled — your data persists across sessions</div>
@@ -253,7 +253,7 @@ tr:hover td{background:#f0fdf4}
   <nav class="sidebar" id="sidebar">
     <div class="sidebar-brand">
       <svg class="sidebar-brand-icon" viewBox="0 0 40 40"><use href="#logo-icon"/></svg>
-      <div class="sidebar-brand-name">GreenLeaf HR<span>Attendance System</span></div>
+      <div class="sidebar-brand-name">GreenPack HR<span>Attendance System</span></div>
     </div>
     <div class="sidebar-user">
       <div class="avatar" id="user-avatar">U</div>
@@ -370,7 +370,7 @@ function generateSampleAttendance() {
   if (!DB.leaves.length) DB.leaves = [
     {id:'LV001',empId:'EMP002',type:'Sick Leave',   from:'2026-05-12',to:'2026-05-13',days:2,reason:'Fever and cold',         status:'approved',appliedOn:'2026-05-10',hrComment:'Get well soon'},
     {id:'LV002',empId:'EMP001',type:'Casual Leave', from:'2026-05-28',to:'2026-05-28',days:1,reason:'Personal work',          status:'approved',appliedOn:'2026-05-25',hrComment:''},
-    {id:'LV003',empId:'EMP003',type:'Earned Leave', from:'2026-06-10',to:'2026-06-12',days:3,reason:'Family function',        status:'pending', appliedOn:'2026-06-01',hrComment:''},
+    {id:'LV003',empId:'EMP003',type:'Privileage Leave', from:'2026-06-10',to:'2026-06-12',days:3,reason:'Family function',        status:'pending', appliedOn:'2026-06-01',hrComment:''},
     {id:'LV004',empId:'EMP004',type:'Sick Leave',   from:'2026-04-08',to:'2026-04-08',days:1,reason:'Doctor appointment',     status:'rejected',appliedOn:'2026-04-07',hrComment:'Insufficient balance'},
   ];
   if (!DB.compoffs.length) DB.compoffs = [
