@@ -1179,7 +1179,7 @@ function loadChartHr(){
   if(!ctx||!window.Chart)return;
   new Chart(ctx,{type:'bar',data:{labels:DB.employees.map(e=>e.name.split(' ')[0]),datasets:[{label:'Present',data:DB.employees.map(e=>getEmpStats(e.id).present),backgroundColor:'rgba(22,163,74,.2)',borderColor:'#16a34a',borderWidth:2,borderRadius:6},{label:'Absent',data:DB.employees.map(e=>getEmpStats(e.id).absent),backgroundColor:'rgba(220,38,38,.15)',borderColor:'#dc2626',borderWidth:2,borderRadius:6}]},options:{responsive:true,plugins:{legend:{position:'top'}},scales:{y:{beginAtZero:true}}}});
 }
-function printReport(){const c=document.getElementById('report-content').innerHTML;const w=window.open('','_blank');w.document.write(`<html><head><title>Report</title><style>body{font-family:sans-serif;font-size:12px;padding:20px}table{width:100%;border-collapse:collapse}th,td{padding:8px 10px;border:1px solid #ddd;text-align:left}th{background:#f0fdf4;font-weight:600}</style></head><body><h2>Monthly Attendance Report — GreenLeaf HR</h2>${c}</body></html>`);w.document.close();w.print();}
+function printReport(){const c=document.getElementById('report-content').innerHTML;const w=window.open('','_blank');w.document.write(`<html><head><title>Report</title><style>body{font-family:sans-serif;font-size:12px;padding:20px}table{width:100%;border-collapse:collapse}th,td{padding:8px 10px;border:1px solid #ddd;text-align:left}th{background:#f0fdf4;font-weight:600}</style></head><body><h2>Monthly Attendance Report — GreenPack HR</h2>${c}</body></html>`);w.document.close();w.print();}
 
 function renderHrManage(){
   return`<div class="card">
