@@ -299,28 +299,31 @@ tr:hover td{background:#f0fdf4}
 // ══════════════════════════════════════════
 const KEYS = { employees:'gl_employees', attendance:'gl_attendance', leaves:'gl_leaves', compoffs:'gl_compoffs', counters:'gl_counters' };
 
-function saveDB() {
+async function saveDB() {
   try {
-    localStorage.setItem(KEYS.employees,  JSON.stringify(DB.employees));
+
+    localStorage.setItem(KEYS.employees, JSON.stringify(DB.employees));
     localStorage.setItem(KEYS.attendance, JSON.stringify(DB.attendance));
-    localStorage.setItem(KEYS.leaves,     JSON.stringify(DB.leaves));
-    localStorage.setItem(KEYS.compoffs,   JSON.stringify(DB.compoffs));
-    localStorage.setItem(KEYS.counters,   JSON.stringify({ lv: leaveCounter, co: coCounter }));
-  } catch(e) { console.warn('Storage save error:', e); }
-}
-function loadDB() {
-  try {
-    const emp = localStorage.getItem(KEYS.employees);
-    const att = localStorage.getItem(KEYS.attendance);
-    const lv  = localStorage.getItem(KEYS.leaves);
-    const co  = localStorage.getItem(KEYS.compoffs);
-    const cnt = localStorage.getItem(KEYS.counters);
-    if (emp) DB.employees  = JSON.parse(emp);
-    if (att) DB.attendance = JSON.parse(att);
-    if (lv)  DB.leaves     = JSON.parse(lv);
-    if (co)  DB.compoffs   = JSON.parse(co);
-    if (cnt) { const c = JSON.parse(cnt); leaveCounter = c.lv||4; coCounter = c.co||3; }
-  } catch(e) { console.warn('Storage load error:', e); }
+    localStorage.setItem(KEYS.leaves, JSON.stringify(DB.leaves));
+    localStorage.setItem(KEYS.compoffs, JSON.stringify(DB.compoffs));
+    localStorage.setItem(KEYS.counters, JSON.stringify({ lv: leaveCounter, co: coCounter }));
+
+    const db = getDatabase();
+
+    await set(ref(db, "greenpack"), {
+      employees: DB.employees,
+      attendance: DB.attendance,
+      leaves: DB.leaves,
+      compoffs: DB.compoffs,
+      counters: {
+        lv: leaveCounter,
+        co: coCounter
+      }
+    });
+
+  } catch(e) {
+    console.warn("Storage save error:", e);
+  }
 }
 
 // ══════════════════════════════════════════
