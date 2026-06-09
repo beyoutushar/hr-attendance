@@ -772,7 +772,7 @@ function renderEmpLeaves(){
         <div class="req-card ${l.status}">
           <div style="display:flex;justify-content:space-between;align-items:flex-start">
             <div><div style="font-weight:600;font-size:14px">${l.type} — ${l.days} day${l.days>1?'s':''}</div>
-            <div class="req-meta">📅 ${l.from} → ${l.to} &nbsp;•&nbsp; Applied: ${l.appliedOn}</div></div>
+            <div class="req-meta">📅 ${l.from} → ${l.to} &nbsp;·&nbsp; Applied: ${l.appliedOn}</div></div>
             ${statusBadge(l.status)}
           </div>
           <div style="background:var(--bg);padding:8px 10px;border-radius:6px;font-size:13px;margin-top:6px">${l.reason}</div>
@@ -784,7 +784,7 @@ function renderEmpLeaves(){
         <div class="req-card ${c.status}">
           <div style="display:flex;justify-content:space-between;align-items:flex-start">
             <div><div style="font-weight:600;font-size:14px">Comp-Off — Worked on ${c.workDate}</div>
-            <div class="req-meta">🗓 Requested Off: ${c.requestedDate} &nbsp;•&nbsp; Applied: ${c.appliedOn}</div></div>
+            <div class="req-meta">🗓 Requested Off: ${c.requestedDate} &nbsp;·&nbsp; Applied: ${c.appliedOn}</div></div>
             ${statusBadge(c.status)}
           </div>
           <div style="background:var(--bg);padding:8px 10px;border-radius:6px;font-size:13px;margin-top:6px">${c.reason}</div>
@@ -946,7 +946,7 @@ function renderHrDashboard(){
     <div class="stat-card"><div class="stat-label">Total Employees</div><div class="stat-value">${DB.employees.length}</div><div class="stat-sub">Active staff</div></div>
     <div class="stat-card"><div class="stat-label">Present Today</div><div class="stat-value text-green">${present}</div><div class="stat-sub">${Math.round(present/DB.employees.length*100)}% of team</div></div>
     <div class="stat-card red"><div class="stat-label">Absent Today</div><div class="stat-value text-danger">${absent}</div></div>
-    <div class="stat-card orange"><div class="stat-label">Pending Approvals</div><div class="stat-value" style="color:var(--warning)">${pendLv+pendCO}</div><div class="stat-sub">${pendLv} leave • ${pendCO} comp-off</div></div>
+    <div class="stat-card orange"><div class="stat-label">Pending Approvals</div><div class="stat-value" style="color:var(--warning)">${pendLv+pendCO}</div><div class="stat-sub">${pendLv} leave · ${pendCO} comp-off</div></div>
   </div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px" class="two-col">
     <div class="card">
@@ -958,7 +958,7 @@ function renderHrDashboard(){
     </div>
     <div class="card">
       <div class="card-header"><div class="card-title">Pending Leave Requests</div>${pendLv+pendCO>0?`<span class="badge badge-warning">${pendLv+pendCO}</span>`:''}</div>
-      ${DB.leaves.filter(l=>l.status==='pending').slice(0,4).map(l=>{const emp=DB.employees.find(e=>e.id===l.empId);return`<div style="padding:10px 0;border-bottom:1px solid var(--border2);display:flex;justify-content:space-between;align-items:center"><div><div style="font-weight:500;font-size:13px">${emp?.name}</div><div style="font-size:11px;color:var(--muted)">${l.type} • ${l.days} day(s) • ${l.from}</div></div><div style="display:flex;gap:5px"><button class="btn btn-sm btn-approve" onclick="hrLeaveAction('${l.id}','approved')">✓</button><button class="btn btn-sm btn-reject" onclick="hrLeaveAction('${l.id}','rejected')">✕</button></div></div>`;}).join('')||'<div class="empty-state" style="padding:16px">No pending requests 🎉</div>'}
+      ${DB.leaves.filter(l=>l.status==='pending').slice(0,4).map(l=>{const emp=DB.employees.find(e=>e.id===l.empId);return`<div style="padding:10px 0;border-bottom:1px solid var(--border2);display:flex;justify-content:space-between;align-items:center"><div><div style="font-weight:500;font-size:13px">${emp?.name}</div><div style="font-size:11px;color:var(--muted)">${l.type} · ${l.days} day(s) · ${l.from}</div></div><div style="display:flex;gap:5px"><button class="btn btn-sm btn-approve" onclick="hrLeaveAction('${l.id}','approved')">✓</button><button class="btn btn-sm btn-reject" onclick="hrLeaveAction('${l.id}','rejected')">✕</button></div></div>`;}).join('')||'<div class="empty-state" style="padding:16px">No pending requests 🎉</div>'}
       <div style="margin-top:10px"><a href="#" onclick="navigate('hr-leaves');return false;" style="font-size:12px;color:var(--primary);font-weight:600">Manage all requests →</a></div>
     </div>
   </div>
@@ -1053,7 +1053,7 @@ function hrLeaveCard(l){
   return`<div class="req-card pending">
     <div style="display:flex;justify-content:space-between;align-items:flex-start">
       <div><div style="font-weight:600;font-size:14px">${emp?.name} — ${l.type}</div>
-      <div class="req-meta">📅 ${l.from} → ${l.to} (${l.days} day${l.days>1?'s':''}) • Applied: ${l.appliedOn}</div></div>
+      <div class="req-meta">📅 ${l.from} → ${l.to} (${l.days} day${l.days>1?'s':''}) · Applied: ${l.appliedOn}</div></div>
       ${statusBadge(l.status)}
     </div>
     <div style="background:var(--bg);padding:8px 10px;border-radius:6px;font-size:13px;margin-top:6px">${l.reason}</div>
@@ -1242,7 +1242,7 @@ function viewEmpDetail(empId){
   openModal(`<div class="modal-title">👤 Employee Profile</div>
     <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--border2)">
       <div class="avatar" style="width:52px;height:52px;font-size:18px;background:var(--primary)">${emp.name.split(' ').map(w=>w[0]).join('').slice(0,2)}</div>
-      <div><div style="font-size:18px;font-weight:700">${emp.name}</div><div style="color:var(--muted)">${emp.position} • ${emp.dept}</div></div>
+      <div><div style="font-size:18px;font-weight:700">${emp.name}</div><div style="color:var(--muted)">${emp.position} · ${emp.dept}</div></div>
     </div>
     <div class="form-row mb-16">
       <div><div class="stat-label">ID</div><div style="font-family:'DM Mono',monospace">${emp.id}</div></div>
@@ -1326,41 +1326,8 @@ const cs=document.createElement('script');
 cs.src='https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js';
 document.head.appendChild(cs);
 
-<script>
-
 // Auto-save every 60 seconds
 setInterval(saveDB, 60000);
-
 </script>
-
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
-import { getDatabase, ref, set } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-database.js";
-
-const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "greenpack-hr.firebaseapp.com",
-  databaseURL: "https://greenpack-hr-default-rtdb.firebaseio.com",
-  projectId: "greenpack-hr",
-  storageBucket: "greenpack-hr.firebasestorage.app",
-  messagingSenderId: "1010174270783",
-  appId: "1:1010174270783:web:f3879bde7bac20607a878a"
-};
-
-const app = initializeApp(firebaseConfig);
-
-console.log("Firebase Connected Successfully");
-
-window.testFirebase = async function() {
-  const db = getDatabase(app);
-
-  await set(ref(db, "test"), {
-    message: "GreenPack Firebase Working"
-  });
-
-  alert("Firebase Test Success");
-};
-</script>
-
 </body>
 </html>
