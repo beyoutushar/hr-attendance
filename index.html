@@ -1327,11 +1327,9 @@ cs.src='https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js';
 document.head.appendChild(cs);
 
 // Auto-save every 60 seconds
-setInterval(saveDB, 60000);
-</script>
-
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
+import { getDatabase, ref, set } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-database.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBME8nwqcRMm0uXp0J5G2M_0pF928ClslY",
@@ -1343,10 +1341,17 @@ const firebaseConfig = {
   appId: "1:1010174270783:web:f3879bde7bac20607a878a"
 };
 
-initializeApp(firebaseConfig);
+const app = initializeApp(firebaseConfig);
 
 console.log("Firebase Connected Successfully");
-</script>
 
-</body>
-</html>
+window.testFirebase = async function() {
+  const db = getDatabase(app);
+
+  await set(ref(db, "test"), {
+    message: "GreenPack Firebase Working"
+  });
+
+  alert("Firebase Test Success");
+};
+</script>
