@@ -1329,5 +1329,24 @@ document.head.appendChild(cs);
 // Auto-save every 60 seconds
 setInterval(saveDB, 60000);
 </script>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBME8nwqcRMm0uXp0J5G2M_0pF928ClslY",
+  authDomain: "greenpack-hr.firebaseapp.com",
+  databaseURL: "https://greenpack-hr-default-rtdb.firebaseio.com",
+  projectId: "greenpack-hr",
+  storageBucket: "greenpack-hr.firebasestorage.app",
+  messagingSenderId: "1010174270783",
+  appId: "1:1010174270783:web:f3879bde7bac20607a878a"
+};
+
+initializeApp(firebaseConfig);
+
+console.log("Firebase Connected Successfully");
+</script>
+
 </body>
 </html>
