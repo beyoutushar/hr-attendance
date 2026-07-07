@@ -297,30 +297,72 @@ tr:hover td{background:#f0fdf4}
 // All reads/writes go through here so data
 // survives page refresh, browser close etc.
 // ══════════════════════════════════════════
-const KEYS = { employees:'gl_employees', attendance:'gl_attendance', leaves:'gl_leaves', compoffs:'gl_compoffs', counters:'gl_counters' };
+// PASTE your Apps Script Web App URL here (see Code.gs setup steps)
+const API_URL = 'https://script.google.com/macros/s/AKfycby2mbyANm1Lrg0NO9Av7LSYHdwx6N-akk51HXuW22Vz4s_SpY76WFx6H0-dUHihMeqSlw/exec';
 
-function saveDB() {
-  try {
-    localStorage.setItem(KEYS.employees,  JSON.stringify(DB.employees));
-    localStorage.setItem(KEYS.attendance, JSON.stringify(DB.attendance));
-    localStorage.setItem(KEYS.leaves,     JSON.stringify(DB.leaves));
-    localStorage.setItem(KEYS.compoffs,   JSON.stringify(DB.compoffs));
-    localStorage.setItem(KEYS.counters,   JSON.stringify({ lv: leaveCounter, co: coCounter }));
-  } catch(e) { console.warn('Storage save error:', e); }
+let _saveInProgress = false, _savePending = false;
+
+function setSyncStatus(state){
+  // state: 'saved' | 'saving' | 'offline'
+  const el = document.querySelector('.storage-dot');
+  const wrap = el ? el.parentElement : null;
+  if (!wrap) return;
+  if (state === 'saving') { wrap.style.color = '#d97706'; wrap.style.background = '#fef3c7'; wrap.lastChild.textContent = 'Saving…'; }
+  else if (state === 'offline') { wrap.style.color = '#dc2626'; wrap.style.background = '#fee2e2'; wrap.lastChild.textContent = 'Offline'; }
+  else { wrap.style.color = 'var(--primary)'; wrap.style.background = 'var(--primary-light)'; wrap.lastChild.textContent = 'Saved'; }
 }
-function loadDB() {
+
+// ---- Save the whole DB to Google Sheets (debounced, no overlapping requests) ----
+async function saveDB() {
+  if (_saveInProgress) { _savePending = true; return; }
+  _saveInProgress = true;
+  setSyncStatus('saving');
   try {
-    const emp = localStorage.getItem(KEYS.employees);
-    const att = localStorage.getItem(KEYS.attendance);
-    const lv  = localStorage.getItem(KEYS.leaves);
-    const co  = localStorage.getItem(KEYS.compoffs);
-    const cnt = localStorage.getItem(KEYS.counters);
-    if (emp) DB.employees  = JSON.parse(emp);
-    if (att) DB.attendance = JSON.parse(att);
-    if (lv)  DB.leaves     = JSON.parse(lv);
-    if (co)  DB.compoffs   = JSON.parse(co);
-    if (cnt) { const c = JSON.parse(cnt); leaveCounter = c.lv||4; coCounter = c.co||3; }
-  } catch(e) { console.warn('Storage load error:', e); }
+    const payload = JSON.stringify({
+      employees: DB.employees,
+      attendance: DB.attendance,
+      leaves: DB.leaves,
+      compoffs: DB.compoffs,
+      admin: DB.admin,
+      holidays: DB.holidays,
+      counters: { lv: leaveCounter, co: coCounter }
+    });
+    await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // avoids CORS preflight on Apps Script
+      body: payload
+    });
+    setSyncStatus('saved');
+  } catch (e) {
+    console.warn('Cloud save failed, will retry:', e);
+    setSyncStatus('offline');
+  } finally {
+    _saveInProgress = false;
+    if (_savePending) { _savePending = false; saveDB(); }
+  }
+}
+
+// ---- Load the whole DB from Google Sheets on startup ----
+// Returns true if the cloud sheet already had real data (so we know NOT to reseed defaults)
+async function loadDB() {
+  try {
+    const res = await fetch(API_URL, { method: 'GET' });
+    const text = await res.text();
+    if (!text || !text.trim()) return false; // empty sheet = first run ever
+    const data = JSON.parse(text);
+    if (data.employees)  DB.employees  = data.employees;
+    if (data.attendance) DB.attendance = data.attendance;
+    if (data.leaves)     DB.leaves     = data.leaves;
+    if (data.compoffs)   DB.compoffs   = data.compoffs;
+    if (data.admin)       DB.admin      = data.admin;
+    if (data.holidays)    DB.holidays   = data.holidays;
+    if (data.counters) { leaveCounter = data.counters.lv||4; coCounter = data.counters.co||3; }
+    return true;
+  } catch(e) {
+    console.warn('Cloud load failed, using local defaults:', e);
+    setSyncStatus('offline');
+    return false;
+  }
 }
 
 // ══════════════════════════════════════════
@@ -1317,17 +1359,27 @@ function showToast(msg,type=''){
 // ══════════════════════════════════════════
 // INIT — Load saved data then seed defaults
 // ══════════════════════════════════════════
-loadDB();
-generateSampleAttendance();
-saveDB(); // persist initial data on first run
+(async function init(){
+  const loginBox = document.querySelector('.login-box');
+  const originalHTML = loginBox.innerHTML;
+  loginBox.innerHTML = '<div style="text-align:center;padding:40px 0;color:var(--muted)">Connecting to server…</div>';
 
-// Load Chart.js
-const cs=document.createElement('script');
-cs.src='https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js';
-document.head.appendChild(cs);
+  const hadCloudData = await loadDB(); // pulls latest data from Google Sheets before anything renders
+  loginBox.innerHTML = originalHTML;
 
-// Auto-save every 60 seconds
-setInterval(saveDB, 60000);
+  if (!hadCloudData) {
+    generateSampleAttendance(); // seed sample data only on the very first run ever
+    await saveDB();
+  }
+
+  // Load Chart.js
+  const cs=document.createElement('script');
+  cs.src='https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js';
+  document.head.appendChild(cs);
+
+  // Auto-save every 60 seconds (in case of missed writes)
+  setInterval(saveDB, 60000);
+})();
 </script>
 </body>
 </html>
