@@ -346,7 +346,7 @@ async function saveDB() {
 // Returns true if the cloud sheet already had real data (so we know NOT to reseed defaults)
 async function loadDB() {
   try {
-    const res = await fetch(API_URL, { method: 'GET' });
+    const res = await fetch(API_URL + '?t=' + Date.now(), { method: 'GET', cache: 'no-store' });
     const text = await res.text();
     if (!text || !text.trim()) return false; // empty sheet = first run ever
     const data = JSON.parse(text);
@@ -458,6 +458,7 @@ function doLogin(){
 }
 function logout(){
   saveDB();
+  if (_liveRefreshTimer) { clearInterval(_liveRefreshTimer); _liveRefreshTimer = null; }
   currentUser=null;currentRole=null;
   document.getElementById('app').style.display='none';
   document.getElementById('login-screen').style.display='flex';
@@ -504,7 +505,9 @@ function buildNav(){
   document.getElementById('sidebar-nav').innerHTML='<div class="nav-section">Menu</div>'+
     pages.map(p=>`<div class="nav-item" id="nav-${p.id}" onclick="navigate('${p.id}')">${ni(p.icon)} ${p.label}</div>`).join('');
 }
+let currentPageId = null;
 function navigate(pid){
+  currentPageId = pid;
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
   const ni2=document.getElementById('nav-'+pid); if(ni2)ni2.classList.add('active');
   const pages=currentRole==='hr'?hrPages:empPages;
@@ -533,6 +536,30 @@ function startApp(){
   buildNav();
   startClock();
   navigate(currentRole==='hr'?'hr-dashboard':'emp-dashboard');
+  startLiveRefresh();
+}
+
+// ══════════════════════════════════════════
+// LIVE REFRESH — pulls latest cloud data every
+// 15s so HR sees phone/other-device activity
+// without needing to manually reload the page.
+// ══════════════════════════════════════════
+let _liveRefreshTimer = null;
+const REFRESHABLE_PAGES = ['hr-dashboard','hr-employees','hr-attendance','hr-leaves','hr-compoffs','hr-salary','hr-report','emp-dashboard','emp-attendance','emp-leaves','emp-summary'];
+
+function startLiveRefresh(){
+  if (_liveRefreshTimer) clearInterval(_liveRefreshTimer);
+  _liveRefreshTimer = setInterval(async () => {
+    if (!currentUser) return; // logged out
+    // Don't interrupt someone mid-typing in a modal (e.g. add employee form)
+    const modalOpen = document.getElementById('modal-overlay').classList.contains('open');
+    if (modalOpen) return;
+    const hadData = await loadDB();
+    if (hadData && currentPageId && REFRESHABLE_PAGES.includes(currentPageId)) {
+      navigate(currentPageId); // silently re-render with fresh data
+    }
+  }, 15000);
+}
 }
 function startClock(){
   function tick(){
