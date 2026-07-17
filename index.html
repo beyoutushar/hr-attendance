@@ -325,7 +325,8 @@ async function saveDB() {
       compoffs: DB.compoffs,
       admin: DB.admin,
       holidays: DB.holidays,
-      counters: { lv: leaveCounter, co: coCounter }
+      shortleaves: DB.shortleaves,
+      counters: { lv: leaveCounter, co: coCounter, sl: shortLeaveCounter }
     });
     await fetch(API_URL, {
       method: 'POST',
@@ -356,7 +357,8 @@ async function loadDB() {
     if (data.compoffs)   DB.compoffs   = data.compoffs;
     if (data.admin)       DB.admin      = data.admin;
     if (data.holidays)    DB.holidays   = data.holidays;
-    if (data.counters) { leaveCounter = data.counters.lv||4; coCounter = data.counters.co||3; }
+    if (data.shortleaves) DB.shortleaves = data.shortleaves;
+    if (data.counters) { leaveCounter = data.counters.lv||4; coCounter = data.counters.co||3; shortLeaveCounter = data.counters.sl||0; }
     return true;
   } catch(e) {
     console.warn('Cloud load failed, using local defaults:', e);
@@ -370,20 +372,22 @@ async function loadDB() {
 // ══════════════════════════════════════════
 const DB = {
   employees: [
-    {id:'EMP001',name:'Priya Patel',    dept:'Marketing',  position:'Marketing Executive',email:'priya@company.com', phone:'9876543211',password:'pass123',joinDate:'2021-07-01',salary:{basic:38000,hra:15200,ta:2500,medical:1250,pf:4560,tax:2400,advance:0}},
-    {id:'EMP002',name:'Amit Verma',     dept:'Sales',      position:'Sales Manager',      email:'amit@company.com',  phone:'9876543212',password:'pass123',joinDate:'2020-01-10',salary:{basic:52000,hra:20800,ta:3500,medical:1250,pf:6240,tax:4800,advance:0}},
-    {id:'EMP003',name:'Sneha Joshi',    dept:'HR',         position:'HR Coordinator',     email:'sneha@company.com', phone:'9876543213',password:'pass123',joinDate:'2023-02-20',salary:{basic:36000,hra:14400,ta:2000,medical:1250,pf:4320,tax:1800,advance:0}},
-    {id:'EMP004',name:'Vikram Singh',   dept:'Finance',    position:'Accountant',         email:'vikram@company.com',phone:'9876543214',password:'pass123',joinDate:'2019-06-05',salary:{basic:42000,hra:16800,ta:2500,medical:1250,pf:5040,tax:2900,advance:0}},
+    {id:'EMP001',name:'Priya Patel',    dept:'Marketing',  position:'Marketing Executive',email:'priya@company.com', phone:'9876543211',password:'pass123',joinDate:'2021-07-01',shift:'general',salary:{basic:38000,hra:15200,ta:2500,medical:1250,pf:4560,tax:2400,advance:0}},
+    {id:'EMP002',name:'Amit Verma',     dept:'Sales',      position:'Sales Manager',      email:'amit@company.com',  phone:'9876543212',password:'pass123',joinDate:'2020-01-10',shift:'general',salary:{basic:52000,hra:20800,ta:3500,medical:1250,pf:6240,tax:4800,advance:0}},
+    {id:'EMP003',name:'Sneha Joshi',    dept:'HR',         position:'HR Coordinator',     email:'sneha@company.com', phone:'9876543213',password:'pass123',joinDate:'2023-02-20',shift:'shift1',salary:{basic:36000,hra:14400,ta:2000,medical:1250,pf:4320,tax:1800,advance:0}},
+    {id:'EMP004',name:'Vikram Singh',   dept:'Finance',    position:'Accountant',         email:'vikram@company.com',phone:'9876543214',password:'pass123',joinDate:'2019-06-05',shift:'shift2',salary:{basic:42000,hra:16800,ta:2500,medical:1250,pf:5040,tax:2900,advance:0}},
   ],
   attendance: {},
   admin: {id:'admin', name:'HR Admin', password:'admin123'},
   leaves: [],
   compoffs: [],
-  holidays: ['2025-01-01','2025-01-26','2025-08-15','2025-10-02','2025-12-25','2026-01-01','2026-01-26','2026-08-15']
+  holidays: ['2025-01-01','2025-01-26','2025-08-15','2025-10-02','2025-12-25','2026-01-01','2026-01-26','2026-08-15'],
+  shortleaves: []
 };
 
 let leaveCounter = 4;
 let coCounter    = 3;
+let shortLeaveCounter = 0;
 
 // ── Generate sample attendance (only if no saved data) ──
 function generateSampleAttendance() {
@@ -430,6 +434,49 @@ function fmtTime12(t){if(!t)return '—';const[h,m]=t.split(':').map(Number);ret
 function diffDays(a,b){return Math.max(1,Math.round((new Date(b)-new Date(a))/86400000)+1)}
 function inr(n){return '₹'+Number(n||0).toLocaleString('en-IN')}
 function fmtMonthLabel(m){return new Date(m+'-01').toLocaleDateString('en-IN',{month:'long',year:'numeric'})}
+
+// ── Shift Configuration ──
+// grace: minutes after start still counted Present
+// halfDayWindow: minutes after start within which a late arrival = Half Day (beyond this = Absent)
+const SHIFTS={
+  general:{label:'General Shift',start:'09:00',end:'18:00',grace:10,halfDayWindow:240},
+  shift1:{label:'1st Shift',start:'07:30',end:'16:00',grace:10,halfDayWindow:240},
+  shift2:{label:'2nd Shift',start:'15:30',end:'23:59',grace:10,halfDayWindow:240},
+};
+function toMinutes(t){const[h,m]=t.split(':').map(Number);return h*60+m;}
+function minutesToTime(mins){const h=Math.floor(mins/60)%24,m=mins%60;return pad(h)+':'+pad(m);}
+function getEmpShift(empId){
+  const emp=DB.employees.find(e=>e.id===empId);
+  return SHIFTS[emp?.shift]||SHIFTS.general;
+}
+// Determine status from an actual clock-in time, given the employee's shift.
+// Returns 'present' | 'halfday' | 'absent'
+function computeArrivalStatus(empId,inTime){
+  if(!inTime) return 'absent';
+  const sh=getEmpShift(empId);
+  const startM=toMinutes(sh.start), inM=toMinutes(inTime);
+  const graceEnd=startM+sh.grace;
+  const halfDayEnd=startM+sh.halfDayWindow;
+  if(inM<=graceEnd) return 'present';
+  if(inM<=halfDayEnd) return 'halfday';
+  return 'absent';
+}
+function shiftCutoffLabels(empId){
+  const sh=getEmpShift(empId);
+  const startM=toMinutes(sh.start);
+  return{
+    graceEnd:fmtTime12(minutesToTime(startM+sh.grace)),
+    halfDayEnd:fmtTime12(minutesToTime(startM+sh.halfDayWindow)),
+    start:fmtTime12(sh.start), end:fmtTime12(sh.end)
+  };
+}
+
+// ── Short Leave (2/month, 3 hrs each, all employees) ──
+function getShortLeaveBalance(empId,monthStr){ // monthStr = 'YYYY-MM', defaults to current month
+  monthStr=monthStr||todayStr().slice(0,7);
+  const used=(DB.shortleaves||[]).filter(s=>s.empId===empId&&s.status==='approved'&&s.date.slice(0,7)===monthStr).length;
+  return{total:2,used,bal:2-used};
+}
 
 // ══════════════════════════════════════════
 // AUTH
@@ -480,6 +527,7 @@ const hrPages=[
   {id:'hr-dashboard', label:'Dashboard',          icon:'grid'},
   {id:'hr-employees', label:'Employees',          icon:'users'},
   {id:'hr-attendance',label:'Attendance Records', icon:'calendar'},
+  {id:'hr-inout',     label:'In / Out Report',    icon:'clock'},
   {id:'hr-leaves',    label:'Leave Requests',     icon:'file-text'},
   {id:'hr-compoffs',  label:'Comp-Off Requests',  icon:'refresh'},
   {id:'hr-salary',    label:'Salary Management',  icon:'wallet'},
@@ -519,7 +567,7 @@ function navigate(pid){
     'hr-dashboard':renderHrDashboard,'hr-employees':renderHrEmployees,
     'hr-attendance':renderHrAttendance,'hr-leaves':renderHrLeaves,
     'hr-compoffs':renderHrCompoffs,'hr-salary':renderHrSalary,
-    'hr-report':renderHrReport,'hr-manage':renderHrManage,
+    'hr-report':renderHrReport,'hr-manage':renderHrManage,'hr-inout':renderHrInOut,
   };
   document.getElementById('page-content').innerHTML=R[pid]?R[pid]():'';
   if(pid==='emp-punch') startPunchClock();
@@ -748,9 +796,15 @@ function startPunchClock(){
 }
 function punchIn(){
   const today=todayStr(),n=new Date();
+  const inTimeStr=pad(n.getHours())+':'+pad(n.getMinutes());
   if(!DB.attendance[currentUser.id])DB.attendance[currentUser.id]={};
-  DB.attendance[currentUser.id][today]={status:'present',inTime:pad(n.getHours())+':'+pad(n.getMinutes()),outTime:null,workHours:null};
-  saveDB(); navigate('emp-punch'); showToast('✓ Clocked in at '+fmtTime12(pad(n.getHours())+':'+pad(n.getMinutes())));
+  // Check if an approved short leave covers today (late arrival allowance)
+  const slToday=(DB.shortleaves||[]).find(s=>s.empId===currentUser.id&&s.date===today&&s.status==='approved'&&s.type==='late');
+  const arrivalStatus=slToday?'present':computeArrivalStatus(currentUser.id,inTimeStr);
+  DB.attendance[currentUser.id][today]={status:arrivalStatus==='absent'?'absent':'present',inTime:inTimeStr,outTime:null,workHours:null,halfDay:arrivalStatus==='halfday'};
+  saveDB(); navigate('emp-punch');
+  const msg=arrivalStatus==='halfday'?'⚠ Clocked in late — marked Half Day':arrivalStatus==='absent'?'⚠ Clocked in too late — marked Absent':'✓ Clocked in at '+fmtTime12(inTimeStr);
+  showToast(msg);
 }
 function punchOut(){
   const today=todayStr(),n=new Date(),rec=DB.attendance[currentUser.id][today];
@@ -790,8 +844,10 @@ function renderMonthRows(empId,year,month){
 // ── Leaves & Comp-Off ──
 function renderEmpLeaves(){
   const empId=currentUser.id,lb=getLeaveBalance(empId);
+  const slb=getShortLeaveBalance(empId);
   const myLeaves=DB.leaves.filter(l=>l.empId===empId).sort((a,b)=>b.appliedOn.localeCompare(a.appliedOn));
   const myCO=DB.compoffs.filter(c=>c.empId===empId).sort((a,b)=>b.appliedOn.localeCompare(a.appliedOn));
+  const mySL=(DB.shortleaves||[]).filter(s=>s.empId===empId).sort((a,b)=>b.appliedOn.localeCompare(a.appliedOn));
   return`
   <div class="stat-grid mb-16">
     ${[['CL','Casual Leave',12,'var(--primary)'],['SL','Sick Leave',12,'var(--teal)'],['EL','Earned Leave',15,'var(--purple)'],['CO','Comp-Off',10,'var(--warning)']].map(([k,label,total,c])=>`
@@ -800,12 +856,18 @@ function renderEmpLeaves(){
       <div class="stat-sub">${lb[k].used} used of ${total}</div>
       <div class="progress" style="margin-top:8px"><div class="progress-bar" style="width:${Math.max(0,lb[k].bal/total*100)}%;background:${c}"></div></div>
     </div>`).join('')}
+    <div class="stat-card"><div class="stat-label">Short Leave (This Month)</div>
+      <div class="stat-value" style="color:#0891b2;font-size:28px">${slb.bal}</div>
+      <div class="stat-sub">${slb.used} used of ${slb.total}</div>
+      <div class="progress" style="margin-top:8px"><div class="progress-bar" style="width:${Math.max(0,slb.bal/slb.total*100)}%;background:#0891b2"></div></div>
+    </div>
   </div>
   <div class="card">
     <div class="tab-bar" id="lv-tabs">
       <button class="tab-btn active" onclick="showLvTab('apply')">📋 Apply Leave</button>
       <button class="tab-btn" onclick="showLvTab('coff')">🔄 Apply Comp-Off</button>
-      <button class="tab-btn" onclick="showLvTab('history')">📁 My Requests (${myLeaves.length+myCO.length})</button>
+      <button class="tab-btn" onclick="showLvTab('short')">⏱ Short Leave</button>
+      <button class="tab-btn" onclick="showLvTab('history')">📁 My Requests (${myLeaves.length+myCO.length+mySL.length})</button>
     </div>
     <div id="lv-apply">
       <div class="form-row">
@@ -833,6 +895,15 @@ function renderEmpLeaves(){
       <div class="form-field"><label>Work Done Description</label><textarea id="co-reason" placeholder="Describe the work you did on the holiday/weekend..."></textarea></div>
       <button class="btn btn-green" onclick="applyCompOff()">Submit Comp-Off Request</button>
     </div>
+    <div id="lv-short" style="display:none">
+      <div class="alert alert-info mb-16">💡 You get 2 short leaves per month, 3 hours each. Use to arrive late (up to 3 hrs after shift start) or leave early (up to 3 hrs before shift end). Balance: <b>${slb.bal} of ${slb.total}</b> remaining this month.</div>
+      <div class="form-row">
+        <div class="form-field"><label>Date</label><input type="date" id="sl-date" value="${todayStr()}" min="${todayStr()}"/></div>
+        <div class="form-field"><label>Type</label><select id="sl-type"><option value="late">Arrive Late</option><option value="early">Leave Early</option></select></div>
+      </div>
+      <div class="form-field"><label>Reason</label><textarea id="sl-reason" placeholder="Reason for short leave..."></textarea></div>
+      <button class="btn btn-green" onclick="applyShortLeave()">Submit Short Leave</button>
+    </div>
     <div id="lv-history" style="display:none">
       <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px">Leave Applications</div>
       ${myLeaves.length?myLeaves.map(l=>`
@@ -857,12 +928,33 @@ function renderEmpLeaves(){
           <div style="background:var(--bg);padding:8px 10px;border-radius:6px;font-size:13px;margin-top:6px">${c.reason}</div>
           ${c.hrComment?`<div style="font-size:12px;color:var(--muted);margin-top:6px">💬 HR: <i>${c.hrComment}</i></div>`:''}
         </div>`).join(''):'<div class="empty-state">No comp-off requests yet</div>'}
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:20px 0 12px">Short Leave Requests</div>
+      ${mySL.length?mySL.map(s=>`
+        <div class="req-card ${s.status}">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start">
+            <div><div style="font-weight:600;font-size:14px">Short Leave — ${s.type==='late'?'Arrive Late':'Leave Early'}</div>
+            <div class="req-meta">📅 ${s.date} &nbsp;·&nbsp; Applied: ${s.appliedOn}</div></div>
+            ${statusBadge(s.status)}
+          </div>
+          <div style="background:var(--bg);padding:8px 10px;border-radius:6px;font-size:13px;margin-top:6px">${s.reason}</div>
+        </div>`).join(''):'<div class="empty-state">No short leave requests yet</div>'}
     </div>
   </div>`;
 }
 window.showLvTab=function(t){
-  ['apply','coff','history'].forEach(x=>document.getElementById('lv-'+x).style.display=x===t?'':'none');
-  document.querySelectorAll('#lv-tabs .tab-btn').forEach((b,i)=>b.classList.toggle('active',['apply','coff','history'][i]===t));
+  ['apply','coff','short','history'].forEach(x=>document.getElementById('lv-'+x).style.display=x===t?'':'none');
+  document.querySelectorAll('#lv-tabs .tab-btn').forEach((b,i)=>b.classList.toggle('active',['apply','coff','short','history'][i]===t));
+};
+window.applyShortLeave=function(){
+  const date=document.getElementById('sl-date').value;
+  const type=document.getElementById('sl-type').value;
+  const reason=document.getElementById('sl-reason').value.trim();
+  if(!date||!reason){showToast('⚠ Please fill all fields');return;}
+  const slb=getShortLeaveBalance(currentUser.id,date.slice(0,7));
+  if(slb.bal<=0){showToast('⚠ No short leave balance left this month');return;}
+  if(!DB.shortleaves) DB.shortleaves=[];
+  DB.shortleaves.push({id:'SL'+String(++shortLeaveCounter).padStart(3,'0'),empId:currentUser.id,date,type,reason,status:'pending',appliedOn:todayStr()});
+  saveDB(); navigate('emp-leaves'); showToast('✓ Short leave request submitted!');
 };
 window.applyLeave=function(){
   const type=document.getElementById('lv-type').value;
@@ -1046,8 +1138,8 @@ function renderHrEmployees(){
   </div>`;
 }
 function renderEmpTable(emps){
-  return`<table><thead><tr><th>Employee</th><th>ID</th><th>Department</th><th>Position</th><th>Phone</th><th>Basic Salary</th><th>Action</th></tr></thead>
-  <tbody>${emps.map(emp=>`<tr><td><div style="display:flex;align-items:center;gap:10px"><div class="avatar" style="width:30px;height:30px;font-size:11px;background:var(--primary-light);color:var(--primary)">${emp.name.split(' ').map(w=>w[0]).join('').slice(0,2)}</div><div><div style="font-weight:500">${emp.name}</div><div style="font-size:11px;color:var(--muted)">${emp.email}</div></div></div></td><td style="font-family:'DM Mono',monospace;font-size:12px">${emp.id}</td><td><span class="badge badge-info">${emp.dept}</span></td><td>${emp.position}</td><td style="font-family:'DM Mono',monospace;font-size:12px">${emp.phone}</td><td style="font-family:'DM Mono',monospace">${inr(emp.salary.basic)}</td><td style="display:flex;gap:4px"><button class="btn btn-sm" onclick="viewEmpDetail('${emp.id}')">View</button><button class="btn btn-sm btn-reject" onclick="deleteEmployee('${emp.id}')">Delete</button></td></tr>`).join('')}</tbody></table>`;
+  return`<table><thead><tr><th>Employee</th><th>ID</th><th>Department</th><th>Position</th><th>Shift</th><th>Phone</th><th>Basic Salary</th><th>Action</th></tr></thead>
+  <tbody>${emps.map(emp=>`<tr><td><div style="display:flex;align-items:center;gap:10px"><div class="avatar" style="width:30px;height:30px;font-size:11px;background:var(--primary-light);color:var(--primary)">${emp.name.split(' ').map(w=>w[0]).join('').slice(0,2)}</div><div><div style="font-weight:500">${emp.name}</div><div style="font-size:11px;color:var(--muted)">${emp.email}</div></div></div></td><td style="font-family:'DM Mono',monospace;font-size:12px">${emp.id}</td><td><span class="badge badge-info">${emp.dept}</span></td><td>${emp.position}</td><td><span class="badge badge-purple">${(SHIFTS[emp.shift]||SHIFTS.general).label}</span></td><td style="font-family:'DM Mono',monospace;font-size:12px">${emp.phone}</td><td style="font-family:'DM Mono',monospace">${inr(emp.salary.basic)}</td><td style="display:flex;gap:4px"><button class="btn btn-sm" onclick="viewEmpDetail('${emp.id}')">View</button><button class="btn btn-sm" onclick="openEditEmployee('${emp.id}')">Edit</button><button class="btn btn-sm btn-reject" onclick="deleteEmployee('${emp.id}')">Delete</button></td></tr>`).join('')}</tbody></table>`;
 }
 window.filterEmployees=function(){
   const q=document.getElementById('emp-search').value.toLowerCase();
@@ -1058,6 +1150,98 @@ window.deleteEmployee=function(empId){
   const idx=DB.employees.findIndex(e=>e.id===empId);
   if(idx>-1){DB.employees.splice(idx,1);saveDB();navigate('hr-employees');showToast('Employee deleted');}
 };
+window.openEditEmployee=function(empId){
+  const emp=DB.employees.find(e=>e.id===empId); if(!emp) return;
+  openModal(`<div class="modal-title">✏️ Edit Employee — ${emp.name}</div>
+    <div class="form-row">
+      <div class="form-field"><label>Full Name</label><input type="text" id="ee-name" value="${emp.name}"/></div>
+      <div class="form-field"><label>Employee ID</label><input type="text" id="ee-id" value="${emp.id}" disabled style="background:#f1f5f9"/></div>
+    </div>
+    <div class="form-row">
+      <div class="form-field"><label>Department</label><input type="text" id="ee-dept" value="${emp.dept}"/></div>
+      <div class="form-field"><label>Position</label><input type="text" id="ee-pos" value="${emp.position}"/></div>
+    </div>
+    <div class="form-row">
+      <div class="form-field"><label>Email</label><input type="email" id="ee-email" value="${emp.email||''}"/></div>
+      <div class="form-field"><label>Phone</label><input type="text" id="ee-phone" value="${emp.phone||''}"/></div>
+    </div>
+    <div class="form-row">
+      <div class="form-field"><label>Join Date</label><input type="date" id="ee-join" value="${emp.joinDate||''}"/></div>
+      <div class="form-field"><label>Shift</label>
+        <select id="ee-shift">
+          ${Object.entries(SHIFTS).map(([k,s])=>`<option value="${k}" ${emp.shift===k?'selected':''}>${s.label} (${fmtTime12(s.start)} – ${fmtTime12(s.end)})</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="form-field"><label>Reset Password (leave blank to keep current)</label><input type="password" id="ee-pass" placeholder="New password"/></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-green" onclick="saveEmployeeEdit('${empId}')">💾 Save Changes</button>
+      <button class="btn" onclick="closeModal()">Cancel</button>
+    </div>`);
+};
+window.saveEmployeeEdit=function(empId){
+  const emp=DB.employees.find(e=>e.id===empId); if(!emp) return;
+  const name=document.getElementById('ee-name').value.trim();
+  if(!name){showToast('⚠ Name is required');return;}
+  emp.name=name;
+  emp.dept=document.getElementById('ee-dept').value.trim();
+  emp.position=document.getElementById('ee-pos').value.trim();
+  emp.email=document.getElementById('ee-email').value.trim();
+  emp.phone=document.getElementById('ee-phone').value.trim();
+  emp.joinDate=document.getElementById('ee-join').value;
+  emp.shift=document.getElementById('ee-shift').value;
+  const newPass=document.getElementById('ee-pass').value;
+  if(newPass) emp.password=newPass;
+  saveDB(); closeModal(); navigate('hr-employees'); showToast('✓ '+emp.name+' updated successfully!');
+};
+
+// ── In / Out Report ──
+function renderHrInOut(){
+  return`<div class="card">
+    <div class="card-header"><div class="card-title">In / Out Report</div>
+      <button class="btn btn-green no-print" onclick="printInOutReport()">🖨 Print / Export</button></div>
+    <div class="search-bar">
+      <input class="search-input" id="io-search" style="flex:2" placeholder="Search employee..." oninput="filterInOut()"/>
+      <input type="date" id="io-from" value="${todayStr()}" onchange="filterInOut()" style="padding:9px 12px;border:1.5px solid var(--border2);border-radius:7px;font-size:13px;font-family:inherit"/>
+      <span style="align-self:center;color:var(--muted);font-size:12px">to</span>
+      <input type="date" id="io-to" value="${todayStr()}" onchange="filterInOut()" style="padding:9px 12px;border:1.5px solid var(--border2);border-radius:7px;font-size:13px;font-family:inherit"/>
+    </div>
+    <div id="io-table-wrap">${buildInOutTable(DB.employees,todayStr(),todayStr(),'')}</div>
+  </div>`;
+}
+window.filterInOut=function(){
+  const q=(document.getElementById('io-search')?.value||'').toLowerCase();
+  const from=document.getElementById('io-from')?.value||todayStr();
+  const to=document.getElementById('io-to')?.value||todayStr();
+  document.getElementById('io-table-wrap').innerHTML=buildInOutTable(DB.employees,from,to,q);
+};
+function buildInOutTable(emps,fromDate,toDate,q){
+  let rows='';
+  emps.filter(e=>!q||e.name.toLowerCase().includes(q)||e.id.toLowerCase().includes(q)).forEach(emp=>{
+    const rec=DB.attendance[emp.id]||{};
+    let d=new Date(fromDate),end=new Date(toDate);
+    while(d<=end){
+      const ds=fmtDate(d),r=rec[ds];
+      d.setDate(d.getDate()+1);
+      if(!r||r.status==='weekend') continue;
+      const date=new Date(ds);
+      const shiftLabel=(SHIFTS[emp.shift]||SHIFTS.general).label;
+      let statusHtml;
+      if(r.status==='present'&&r.halfDay) statusHtml='<span class="badge badge-warning">Half Day</span>';
+      else if(r.status==='present') statusHtml='<span class="badge badge-success">Present</span>';
+      else if(r.status==='absent') statusHtml='<span class="badge badge-danger">Absent</span>';
+      else statusHtml='<span class="badge badge-warning">Leave</span>';
+      rows+=`<tr><td><b>${emp.name}</b><div style="font-size:11px;color:var(--muted)">${emp.id}</div></td><td style="font-family:'DM Mono',monospace;font-size:12px">${date.toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}</td><td><span class="badge badge-purple">${shiftLabel}</span></td><td>${statusHtml}</td><td style="font-family:'DM Mono',monospace;font-weight:600;color:var(--primary)">${fmtTime12(r.inTime)}</td><td style="font-family:'DM Mono',monospace;font-weight:600;color:var(--danger)">${fmtTime12(r.outTime)}</td><td>${r.workHours?r.workHours.toFixed(1)+'h':'—'}</td></tr>`;
+    }
+  });
+  return`<div class="table-wrap"><table><thead><tr><th>Employee</th><th>Date</th><th>Shift</th><th>Status</th><th>In Time</th><th>Out Time</th><th>Hours</th></tr></thead><tbody>${rows||'<tr><td colspan="7" class="empty-state">No records found for this range</td></tr>'}</tbody></table></div>`;
+}
+function printInOutReport(){
+  const c=document.getElementById('io-table-wrap').innerHTML;
+  const w=window.open('','_blank');
+  w.document.write(`<html><head><title>In/Out Report</title><style>body{font-family:sans-serif;font-size:12px;padding:20px}table{width:100%;border-collapse:collapse}th,td{padding:8px 10px;border:1px solid #ddd;text-align:left}th{background:#f0fdf4;font-weight:600}</style></head><body><h2>In / Out Report — GreenPack HR</h2>${c}</body></html>`);
+  w.document.close();w.print();
+}
 
 function renderHrAttendance(){
   return`<div class="card">
@@ -1098,11 +1282,14 @@ function buildAttTable(emps,month,q,filterStatus){
 function renderHrLeaves(){
   const pending=DB.leaves.filter(l=>l.status==='pending');
   const all=[...DB.leaves].sort((a,b)=>b.appliedOn.localeCompare(a.appliedOn));
+  const slPending=(DB.shortleaves||[]).filter(s=>s.status==='pending');
+  const slAll=[...(DB.shortleaves||[])].sort((a,b)=>b.appliedOn.localeCompare(a.appliedOn));
   return`<div class="card">
     <div class="card-header"><div class="card-title">Leave Requests</div>${pending.length?`<span class="badge badge-warning">${pending.length} pending</span>`:'<span class="badge badge-success">All processed</span>'}</div>
     <div class="tab-bar" id="hr-lv-tabs">
       <button class="tab-btn active" onclick="showHrLvTab('pending')">Pending (${pending.length})</button>
       <button class="tab-btn" onclick="showHrLvTab('all')">All (${all.length})</button>
+      <button class="tab-btn" onclick="showHrLvTab('short')">Short Leave (${slPending.length} pending)</button>
     </div>
     <div id="hr-lv-pending">
       ${pending.length?pending.map(l=>hrLeaveCard(l)).join(''):'<div class="empty-state">No pending leave requests 🎉</div>'}
@@ -1111,6 +1298,12 @@ function renderHrLeaves(){
       <div class="table-wrap"><table>
         <thead><tr><th>Employee</th><th>Type</th><th>From</th><th>To</th><th>Days</th><th>Applied</th><th>Status</th><th>Action</th></tr></thead>
         <tbody>${all.map(l=>{const emp=DB.employees.find(e=>e.id===l.empId);return`<tr><td><b>${emp?.name||l.empId}</b></td><td>${l.type}</td><td style="font-family:'DM Mono',monospace;font-size:12px">${l.from}</td><td style="font-family:'DM Mono',monospace;font-size:12px">${l.to}</td><td>${l.days}</td><td style="font-size:12px">${l.appliedOn}</td><td>${statusBadge(l.status)}</td><td>${l.status==='pending'?`<div style="display:flex;gap:4px"><button class="btn btn-sm btn-approve" onclick="hrLeaveAction('${l.id}','approved')">✓ Approve</button><button class="btn btn-sm btn-reject" onclick="hrLeaveAction('${l.id}','rejected')">✕ Reject</button></div>`:'—'}</td></tr>`;}).join('')||'<tr><td colspan="8" class="empty-state">No records</td></tr>'}</tbody>
+      </table></div>
+    </div>
+    <div id="hr-lv-short" style="display:none">
+      <div class="table-wrap"><table>
+        <thead><tr><th>Employee</th><th>Type</th><th>Date</th><th>Reason</th><th>Applied</th><th>Status</th><th>Action</th></tr></thead>
+        <tbody>${slAll.map(s=>{const emp=DB.employees.find(e=>e.id===s.empId);return`<tr><td><b>${emp?.name||s.empId}</b></td><td>${s.type==='late'?'Arrive Late':'Leave Early'}</td><td style="font-family:'DM Mono',monospace;font-size:12px">${s.date}</td><td style="font-size:12px;max-width:200px">${s.reason}</td><td style="font-size:12px">${s.appliedOn}</td><td>${statusBadge(s.status)}</td><td>${s.status==='pending'?`<div style="display:flex;gap:4px"><button class="btn btn-sm btn-approve" onclick="hrShortLeaveAction('${s.id}','approved')">✓ Approve</button><button class="btn btn-sm btn-reject" onclick="hrShortLeaveAction('${s.id}','rejected')">✕ Reject</button></div>`:'—'}</td></tr>`;}).join('')||'<tr><td colspan="7" class="empty-state">No short leave requests</td></tr>'}</tbody>
       </table></div>
     </div>
   </div>`;
@@ -1134,7 +1327,13 @@ function hrLeaveCard(l){
 window.showHrLvTab=function(t){
   document.getElementById('hr-lv-pending').style.display=t==='pending'?'':'none';
   document.getElementById('hr-lv-all').style.display=t==='all'?'':'none';
-  document.querySelectorAll('#hr-lv-tabs .tab-btn').forEach((b,i)=>b.classList.toggle('active',['pending','all'][i]===t));
+  document.getElementById('hr-lv-short').style.display=t==='short'?'':'none';
+  document.querySelectorAll('#hr-lv-tabs .tab-btn').forEach((b,i)=>b.classList.toggle('active',['pending','all','short'][i]===t));
+};
+window.hrShortLeaveAction=function(sid,action){
+  const s=(DB.shortleaves||[]).find(x=>x.id===sid); if(!s) return;
+  s.status=action;
+  saveDB(); navigate('hr-leaves'); showToast(`✓ Short leave ${action}`);
 };
 window.hrLeaveAction=function(lid,action){
   const l=DB.leaves.find(x=>x.id===lid); if(!l) return;
@@ -1351,7 +1550,15 @@ function openAddEmployee(){
     </div>
     <div class="form-row">
       <div class="form-field"><label>Join Date</label><input type="date" id="ne-join" value="${todayStr()}"/></div>
+      <div class="form-field"><label>Shift</label>
+        <select id="ne-shift">
+          ${Object.entries(SHIFTS).map(([k,s])=>`<option value="${k}">${s.label} (${fmtTime12(s.start)} – ${fmtTime12(s.end)})</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
       <div class="form-field"><label>Login Password</label><input type="password" id="ne-pass" placeholder="Set initial password"/></div>
+      <div></div>
     </div>
     <div class="form-row">
       <div class="form-field"><label>Basic Salary (₹)</label><input type="number" id="ne-basic" value="30000"/></div>
@@ -1367,7 +1574,7 @@ window.addEmployee=function(){
   if(!name||!id){showToast('⚠ Name and ID are required');return;}
   if(DB.employees.find(e=>e.id===id)){showToast('⚠ Employee ID already exists');return;}
   const basic=+document.getElementById('ne-basic').value||30000,hra=+document.getElementById('ne-hra').value||12000;
-  DB.employees.push({id,name,dept:document.getElementById('ne-dept').value,position:document.getElementById('ne-pos').value||'Staff',email:document.getElementById('ne-email').value,phone:document.getElementById('ne-phone').value,joinDate:document.getElementById('ne-join').value,password:document.getElementById('ne-pass').value||'pass123',salary:{basic,hra,ta:2000,medical:1250,pf:Math.round(basic*.12),tax:Math.round(basic*.05),advance:0}});
+  DB.employees.push({id,name,dept:document.getElementById('ne-dept').value,position:document.getElementById('ne-pos').value||'Staff',email:document.getElementById('ne-email').value,phone:document.getElementById('ne-phone').value,joinDate:document.getElementById('ne-join').value,shift:document.getElementById('ne-shift').value||'general',password:document.getElementById('ne-pass').value||'pass123',salary:{basic,hra,ta:2000,medical:1250,pf:Math.round(basic*.12),tax:Math.round(basic*.05),advance:0}});
   saveDB(); closeModal(); navigate('hr-employees'); showToast('✓ '+name+' added successfully!');
 };
 
